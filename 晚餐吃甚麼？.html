@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>晚餐選擇器</title>
+  <style>
+    body { font-family: sans-serif; padding: 2em; background: #f7f7f7; }
+    .card { background: white; border-radius: 12px; padding: 2em; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-width: 600px; margin: auto; }
+    button { padding: 0.5em 1em; font-size: 1em; border: none; border-radius: 8px; background: #4CAF50; color: white; cursor: pointer; margin: 0 0.3em;}
+    button:hover { background: #45a049; }
+    h1, h2, h3 { text-align: center; }
+    ul { padding-left: 1.2em; }
+    #history { margin-top: 2em; background: #eef6ee; padding: 1em; border-radius: 8px; }
+    #buttons { text-align: center; margin-top: 1em; }
+    #clearBtn { background: #888; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>今晚吃什麼？</h1>
+  <h2 id="today"></h2>
+
+  <p id="suggestion">載入中...</p>
+  <div id="buttons">
+    <button onclick="acceptCurrent()">接受這個</button>
+    <button id="skipBtn" onclick="skipCurrent()" style="background:#f44336;">不要這個</button>
+  </div>
+
+  <div id="history">
+    <h3>最近吃過的餐點：</h3>
+    <ul id="historyList">
+      <li>還沒有歷史紀錄</li>
+    </ul>
+      <button id="clearBtn" onclick="clearHistory()">清空歷史</button>
+  </div>
+</div>
+
+<script>
+const data = [
+  { name: '牛肉湯', store: '欣欣牛肉湯', closed: [2] },
+  { name: '牛肉湯', store: '牛狀元', closed: [3] },
+  { name: '春捲', store: '', closed: [3] },
+  { name: '意大利麵', store: '轉角意大利麵', only: [0] },
+  { name: '生魚片', store: '黃昏市場' },
+  { name: '炒飯', store: '元賀', closed: [6] },
+  { name: '牛肉麵', store: '劉佬佬牛肉麵' , avoid: '榨菜'},
+  { name: '涼麵', store: '辛家涼麵', closed: [6, 0] },
+  { name: '粥', store: '行運' },
+  { name: '雞肉飯', store: '沐橙', closed: [6, 0] },
+  { name: '碳烤雞肉便當', store: '香川' , closed: [1, 0] },
+  { name: '鍋燒麵', store: '阿麗', closed: [3] },
+  { name: '魯味', store: '香香', sub: '高麗菜、黑輪『片』"、蘿蔔、四季豆 / 烏龍麵' , avoid: '榨菜'},
+  { name: '魯味', store: '潮味決', sub: '塔香三杯(湯) / 烏龍麵 / 娃娃菜、甜不辣、白蘿蔔、馬鈴薯、起司球' },
+  { name: '拉麵', store: '' },
+  { name: '速食', store: '麥當勞' },
+  { name: '速食', store: '肯德基' },
+  { name: '火鍋', store: '' },
+  { name: '健康餐', store: 'KIWI POKE', sub: '中份 / 紫米飯+藜麥飯 / 蘋果+馬鈴薯+玉子燒+芋頭+南瓜+地瓜+時蔬 / 鮭魚+牛肉+蛋 / 玉米片 / 和風芥末' },
+  { name: '鴨肉飯', store: '' },
+  { name: '湯包', store: '天心坊', closed: [4], avoid: '牛肉口味' },
+  { name: '湯包', store: '三鮮'},
+  { name: '水餃', store: '八方雲集'},
+  { name: '水餃', store: '餃屋', sub: '九層塔水餃' },
+  { name: '鐵板燒', store: '大埔鐵板燒', sub: '牛肉'  },
+  { name: '鐵板燒', store: '大埔鐵板燒', sub: '羊肉' },
+  { name: '煎餅粿子', store: '', closed: [1] ,sub: '起司、土豆絲、雞排', avoid: '榨菜'},
+  { name: '咖哩', store: '' , closed: [0] },
+  { name: '鹹酥雞', store: '傳香' },
+  { name: '台越', store: '圓圓' , sub: '打拋豬' },
+  { name: '台越', store: '圓圓' , sub: '椒麻雞' },
+  { name: '拉麵', store: '悟拉麵' , sub: '拉麵+串燒', avoid: '旬乾、木耳'},
+  { name: '健康餐', store: 'HoJa' , sub: '紫米飯/ 甜椒丁+馬鈴薯+櫛瓜丁+毛豆仁+蜜黑豆+水果丁/ 迷迭香雞胸（有預算就吃鮭魚片）/ 麵包丁+蒜酥/ 海南油蔥'},
+];
+
+// 讀取歷史紀錄
+function loadHistory() {
+  return JSON.parse(localStorage.getItem('dinnerHistory') || '[]');
+}
+
+// 儲存歷史紀錄 (最多5筆)
+function saveHistory(item) {
+  let history = loadHistory();
+  const date = new Date().toLocaleDateString('zh-Hant-TW');
+  history = history.filter(h => h.name !== item.name || h.store !== item.store);
+  history.unshift({ ...item, date });
+  if (history.length > 5) history.pop();
+  localStorage.setItem('dinnerHistory', JSON.stringify(history));
+}
+
+// 清空歷史紀錄
+function clearHistory() {
+  localStorage.removeItem('dinnerHistory');
+  displayHistory();
+}
+
+// 顯示歷史紀錄
+function displayHistory() {
+  const historyList = document.getElementById('historyList');
+  const history = loadHistory();
+  if (history.length === 0) {
+    historyList.innerHTML = '<li>還沒有歷史紀錄</li>';
+  } else {
+    historyList.innerHTML = history.map(h =>
+      `<li>${h.name}${h.store ? '（' + h.store + '）' : ''} - ${h.date || ''}</li>`
+    ).join('');
+  }
+}
+
+// 讀取跳過清單
+function loadSkipList() {
+  return JSON.parse(localStorage.getItem('skipList') || '[]');
+}
+
+// 新增跳過餐點
+function addSkip(item) {
+  let skip = loadSkipList();
+  if (!skip.find(s => s.name === item.name && s.store === item.store)) {
+    skip.push(item);
+    localStorage.setItem('skipList', JSON.stringify(skip));
+  }
+}
+
+let currentPick = null;
+
+function pickDinner() {
+  const now = new Date();
+  const day = now.getDay();
+  const history = loadHistory();
+  const skipList = loadSkipList();
+
+  const filtered = data.filter(item => {
+    if (item.closed && item.closed.includes(day)) return false;
+    if (item.only && !item.only.includes(day)) return false;
+    if (item.dislike) return false;
+
+    for (const h of history) {
+      if (h.name === item.name && h.store === item.store) return false;
+    }
+    for (const s of skipList) {
+      if (s.name === item.name && s.store === item.store) return false;
+    }
+
+    return true;
+  });
+
+  currentPick = (filtered.length === 0)
+    ? data[Math.floor(Math.random() * data.length)]
+    : filtered[Math.floor(Math.random() * filtered.length)];
+
+  let result = `推薦你吃：<strong>${currentPick.name}${currentPick.store ? '（' + currentPick.store + '）' : ''}</strong>`;
+  if (currentPick.sub) result += `<br><small>建議：${currentPick.sub}</small>`;
+if (currentPick.avoid) result += `<br><small>**注意，不要：${currentPick.avoid}</small>`;
+
+  document.getElementById('suggestion').innerHTML = result;
+}
+
+function acceptCurrent() {
+  if (!currentPick) return;
+  saveHistory(currentPick);
+  displayHistory();
+  pickDinner();
+}
+
+function skipCurrent() {
+  if (!currentPick) return;
+  addSkip(currentPick);
+  pickDinner();
+}
+
+// 初始載入
+document.getElementById('today').innerText = new Date().toLocaleDateString('zh-Hant-TW', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+displayHistory();
+pickDinner();
+</script>
+</body>
+</html>
